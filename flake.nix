@@ -1,6 +1,7 @@
 {
   inputs = {
     nixpkgs.url = "github:nixos/nixpkgs/nixpkgs-unstable";
+    crane.url = "github:ipetkov/crane";
 
     fenix = {
       url = "github:nix-community/fenix";
@@ -8,29 +9,68 @@
     };
   };
 
-  outputs = inputs: let
-    perSystem = fn:
-      inputs.nixpkgs.lib.genAttrs ["x86_64-linux"] (system:
-        fn (import inputs.nixpkgs {
-          inherit system;
-          overlays = [inputs.fenix.overlays.default];
-        }));
-  in {
-    devShells = perSystem (pkgs: {
-      default = pkgs.mkShell {
-        packages = with pkgs; [
-          rust-analyzer-nightly
-          (fenix.stable.withComponents
-            ["cargo" "clippy" "rustc" "rust-src" "rustfmt"])
-
-          pkg-config
-          wayland
-          libxkbcommon
-          xorg.libX11
-        ];
-
-        LD_LIBRARY_PATH = pkgs.lib.makeLibraryPath (with pkgs; [wayland vulkan-loader]);
+  outputs = {
+    nixpkgs,
+    crane,
+    fenix,
+    ...
+  }: let
+    systems = ["x86_64-linux"];
+    perSystem = f:
+      nixpkgs.lib.foldAttrs nixpkgs.lib.mergeAttrs {}
+      (map (s: nixpkgs.lib.mapAttrs (_: v: {${s} = v;}) (f s)) systems);
+  in
+    perSystem (system: let
+      pkgs = import nixpkgs {
+        inherit system;
+        overlays = [fenix.overlays.default];
       };
+
+      craneLib =
+        (crane.mkLib pkgs).overrideToolchain
+        (pkgs.fenix.complete.withComponents [
+          "cargo"
+          "clippy"
+          "rustc"
+          "rust-src"
+          "rustc-codegen-cranelift-preview"
+        ]);
+
+      src = craneLib.cleanCargoSource ./.;
+
+      args = {
+        inherit src;
+        strictDeps = true;
+        nativeBuildInputs = with pkgs; [pkg-config mold];
+        buildInputs = with pkgs; [libxkbcommon xorg.libX11];
+      };
+
+      cargoArtifacts = craneLib.buildDepsOnly args;
+      cargoClippyExtraArgs = "--all-targets -- --deny warnings";
+      package = craneLib.buildPackage (args // {inherit cargoArtifacts;});
+
+      libraryPath = pkgs.lib.makeLibraryPath (with pkgs; [
+        xorg.libxcb
+        xorg.libX11
+        libxkbcommon
+        vulkan-loader
+        wayland
+      ]);
+    in {
+      devShells.default = craneLib.devShell {
+        packages = with args; (nativeBuildInputs ++ buildInputs);
+        LD_LIBRARY_PATH = libraryPath;
+      };
+
+      checks = {
+        inherit package;
+
+        fmt = craneLib.cargoFmt (args // {inherit cargoArtifacts;});
+        fmt-toml = craneLib.taploFmt {src = pkgs.lib.sources.sourceFilesBySuffices src [".toml"];};
+        test = craneLib.cargoTest (args // {inherit cargoArtifacts;});
+        clippy = craneLib.cargoClippy (args // {inherit cargoArtifacts cargoClippyExtraArgs;});
+      };
+
+      packages.default = package;
     });
-  };
 }

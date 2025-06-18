@@ -14,3 +14,10 @@ features = ["wayland", "http_client"]
 [profile.dev]
 debug = 1
 codegen-backend = "cranelift"
+
+[profile.release]
+opt-level = "z"
+strip = true
+lto = true
+codegen-units = 1
+panic = "abort"

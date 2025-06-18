@@ -1,6 +1,6 @@
 use gpui::{
-  App, Application, Bounds, Context, SharedString, Window, WindowBounds, WindowOptions, div,
-  prelude::*, px, rgb, size,
+  App, Application, Bounds, Context, Layer, LayerShellSettings, SharedString, Window, WindowBounds,
+  WindowOptions, div, prelude::*, px, rgb, size,
 };
 
 struct HelloWorld {
@@ -32,6 +32,12 @@ fn main() {
     cx.open_window(
       WindowOptions {
         window_bounds: Some(WindowBounds::Windowed(bounds)),
+        kind: gpui::WindowKind::LayerShell(LayerShellSettings {
+          layer: Layer::Top,
+          keyboard_interactivity: gpui::KeyboardInteractivity::OnDemand,
+          namespace: "gpui-test".into(),
+          ..Default::default()
+        }),
         ..Default::default()
       },
       |_, cx| {

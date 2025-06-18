@@ -42,7 +42,7 @@
         inherit src;
         strictDeps = true;
         nativeBuildInputs = with pkgs; [pkg-config mold];
-        buildInputs = with pkgs; [libxkbcommon xorg.libX11];
+        buildInputs = with pkgs; [libxkbcommon];
       };
 
       cargoArtifacts = craneLib.buildDepsOnly args;
@@ -50,8 +50,6 @@
       package = craneLib.buildPackage (args // {inherit cargoArtifacts;});
 
       libraryPath = pkgs.lib.makeLibraryPath (with pkgs; [
-        xorg.libxcb
-        xorg.libX11
         libxkbcommon
         vulkan-loader
         wayland
